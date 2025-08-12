@@ -1,0 +1,18 @@
+# Web框架
+fastapi
+uvicorn[standard]
+pydantic
+
+# HTTP客户端
+httpx
+
+# 工具库
+python-dotenv
+python-multipart
+qrcode[pil]
+tiktoken
+aiofiles
+structlog
+
+# 加密库
+cryptography

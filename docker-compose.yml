@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  qwen-proxy:
+    build: .
+    container_name: qwen-openai-proxy-python
+    ports:
+      - "8080:8080"
+    environment:
+      # 服务器配置
+      - PORT=8080
+      - HOST=0.0.0.0  # Docker容器中需要监听0.0.0.0
+      
+      # 功能配置
+      - STREAM=true
+      - DEBUG_LOG=false
+      - LOG_FILE_LIMIT=20
+      
+      # 默认模型
+      - DEFAULT_MODEL=qwen3-coder-plus
+      
+      # API超时设置
+      - API_TIMEOUT=300
+      
+      # Qwen OAuth配置 (可选择性覆盖默认值)
+      # - QWEN_CLIENT_ID=your_client_id
+      # - QWEN_CLIENT_SECRET=your_client_secret
+      # - QWEN_BASE_URL=https://chat.qwen.ai
+      
+    volumes:
+      # 持久化认证数据和日志 - 映射到用户主目录
+      - ~/.qwen:/home/appuser/.qwen
+      - qwen_logs:/app/logs
+    
+    restart: unless-stopped
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+volumes:
+  qwen_logs:
+    driver: local
