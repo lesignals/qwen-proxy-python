@@ -179,4 +179,18 @@ python test_api.py --url http://localhost:8080
 
 代理现在在终端中显示每个请求的token计数，显示输入tokens和API返回的使用统计（提示、完成和总tokens）。
 
+## 致谢
+
+本项目基于 [aptdnfapt/qwen-code-oai-proxy](https://github.com/aptdnfapt/qwen-code-oai-proxy) 的Node.js版本进行开发。感谢原作者提供了优秀的基础实现和设计思路。
+
+### 主要改进
+
+- **跨平台兼容性**: 从Node.js迁移到Python，解决了部分Linux环境下的兼容性问题
+- **更好的适配性**: Python生态系统在不同操作系统上的适配性更高
+- **现代化架构**: 使用FastAPI替代Express.js，提供更好的性能和开发体验
+- **类型安全**: 采用Pydantic进行数据验证，提高代码可靠性
+- **简化部署**: 优化了Docker配置和依赖管理
+
+在保持原项目所有核心功能的基础上，Python版本提供了更好的稳定性和跨平台支持。
+
 有关更详细的文档，请参阅 `docs/` 目录。
