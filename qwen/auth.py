@@ -7,7 +7,7 @@ import base64
 import secrets
 import asyncio
 from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime
 
 import httpx
@@ -130,7 +130,7 @@ class QwenAuthManager:
         current_time = int(datetime.now().timestamp() * 1000)
         return current_time < credentials.expiry_date - TOKEN_REFRESH_BUFFER_MS
     
-    def get_account_ids(self) -> list[str]:
+    def get_account_ids(self) -> List[str]:
         """获取所有账户ID列表."""
         return list(self.accounts.keys())
     
