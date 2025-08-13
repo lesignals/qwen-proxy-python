@@ -47,6 +47,9 @@ class Config(BaseModel):
     
     # 默认API端点
     default_api_base_url: str = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    
+    # API认证配置
+    api_key: Optional[str] = os.getenv('API_KEY')  # 用于保护代理服务器的API Key
 
 
 # 创建全局配置实例

@@ -6,9 +6,10 @@ from contextlib import asynccontextmanager
 from typing import Union, Dict, Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from models import (
     ChatCompletionRequest,
@@ -27,10 +28,35 @@ from config import config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# 认证配置
+security = HTTPBearer(auto_error=False)
+
 # 全局实例
 qwen_api = QwenAPI()
 auth_manager = QwenAuthManager()
 debug_logger = DebugLogger()
+
+
+async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """验证Authorization header中的token."""
+    # 如果没有配置API Key，则跳过认证
+    if not config.api_key:
+        logger.warning("未配置API_KEY环境变量，认证功能已禁用")
+        return None
+        
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="需要提供API Key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if credentials.credentials != config.api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的API Key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return credentials.credentials
 
 
 @asynccontextmanager
@@ -463,31 +489,31 @@ proxy = QwenOpenAIProxy()
 
 # 路由定义
 @app.post("/v1/chat/completions")
-async def chat_completions(request: ChatCompletionRequest, raw_request: Request):
+async def chat_completions(request: ChatCompletionRequest, raw_request: Request, token: str = Depends(verify_token)):
     """聊天完成端点."""
     return await proxy.handle_chat_completion(request, raw_request)
 
 
 @app.get("/v1/models")
-async def list_models(raw_request: Request):
+async def list_models(raw_request: Request, token: str = Depends(verify_token)):
     """模型列表端点."""
     return await proxy.handle_models(raw_request)
 
 
 @app.post("/v1/embeddings")
-async def create_embeddings(request: EmbeddingRequest, raw_request: Request):
+async def create_embeddings(request: EmbeddingRequest, raw_request: Request, token: str = Depends(verify_token)):
     """嵌入向量端点."""
     return await proxy.handle_embeddings(request, raw_request)
 
 
 @app.post("/auth/initiate")
-async def auth_initiate(raw_request: Request):
+async def auth_initiate(raw_request: Request, token: str = Depends(verify_token)):
     """认证启动端点."""
     return await proxy.handle_auth_initiate(raw_request)
 
 
 @app.post("/auth/poll")
-async def auth_poll(poll_data: dict, raw_request: Request):
+async def auth_poll(poll_data: dict, raw_request: Request, token: str = Depends(verify_token)):
     """认证轮询端点."""
     return await proxy.handle_auth_poll(poll_data, raw_request)
 

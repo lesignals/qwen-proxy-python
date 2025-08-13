@@ -10,10 +10,17 @@ from typing import Dict, Any
 class QwenProxyTester:
     """Qwen代理测试器."""
     
-    def __init__(self, base_url: str = "http://localhost:8080"):
+    def __init__(self, base_url: str = "http://localhost:8080", api_key: str = None):
         """初始化测试器."""
         self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=30.0)
+        self.api_key = api_key
+        
+        # 设置默认headers
+        headers = {}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+            
+        self.client = httpx.AsyncClient(timeout=30.0, headers=headers)
     
     async def test_health(self) -> bool:
         """测试健康检查端点."""
@@ -141,6 +148,72 @@ class QwenProxyTester:
             print(f"❌ 嵌入向量测试失败: {e}")
             return False
     
+    async def test_api_authentication(self) -> bool:
+        """测试API Key认证."""
+        try:
+            print("🔄 正在测试API Key认证...")
+            
+            # 创建一个没有认证的客户端
+            no_auth_client = httpx.AsyncClient(timeout=30.0)
+            
+            # 测试没有API Key的请求
+            try:
+                response = await no_auth_client.get(f"{self.base_url}/v1/models")
+                if response.status_code == 401:
+                    print("✅ 无API Key请求被正确拒绝")
+                    no_auth_success = True
+                else:
+                    print(f"❌ 无API Key请求应该返回401，但返回了{response.status_code}")
+                    no_auth_success = False
+            except Exception as e:
+                print(f"❌ 测试无认证请求失败: {e}")
+                no_auth_success = False
+            finally:
+                await no_auth_client.aclose()
+            
+            # 测试错误的API Key
+            wrong_key_client = httpx.AsyncClient(
+                timeout=30.0,
+                headers={"Authorization": "Bearer wrong-api-key"}
+            )
+            
+            try:
+                response = await wrong_key_client.get(f"{self.base_url}/v1/models")
+                if response.status_code == 401:
+                    print("✅ 错误API Key请求被正确拒绝")
+                    wrong_key_success = True
+                else:
+                    print(f"❌ 错误API Key请求应该返回401，但返回了{response.status_code}")
+                    wrong_key_success = False
+            except Exception as e:
+                print(f"❌ 测试错误API Key失败: {e}")
+                wrong_key_success = False
+            finally:
+                await wrong_key_client.aclose()
+            
+            # 测试正确的API Key（如果提供了）
+            if self.api_key:
+                try:
+                    response = await self.client.get(f"{self.base_url}/v1/models")
+                    if response.status_code == 200:
+                        print("✅ 正确API Key请求成功")
+                        correct_key_success = True
+                    else:
+                        print(f"❌ 正确API Key请求失败，状态码: {response.status_code}")
+                        correct_key_success = False
+                except Exception as e:
+                    print(f"❌ 测试正确API Key失败: {e}")
+                    correct_key_success = False
+            else:
+                print("⚠️  未提供API Key，跳过正确API Key测试")
+                correct_key_success = True  # 如果没有提供API Key，认为这部分测试通过
+            
+            return no_auth_success and wrong_key_success and correct_key_success
+                
+        except Exception as e:
+            print(f"❌ API Key认证测试失败: {e}")
+            return False
+    
     async def test_auth_endpoints(self) -> bool:
         """测试认证端点（不实际执行认证）."""
         try:
@@ -157,6 +230,9 @@ class QwenProxyTester:
                 else:
                     print("❌ 认证启动端点: 响应格式不正确")
                     return False
+            elif response.status_code == 401:
+                print("✅ 认证启动端点: 正确要求API Key认证")
+                return True
             else:
                 print(f"❌ 认证启动端点失败: 状态码 {response.status_code}")
                 return False
@@ -169,12 +245,19 @@ class QwenProxyTester:
         """运行所有测试."""
         print("=" * 50)
         print("开始运行Qwen代理API测试")
+        if self.api_key:
+            print(f"使用API Key: {self.api_key[:8]}...")
+        else:
+            print("未提供API Key，将测试认证功能")
         print("=" * 50)
         
         results = {}
         
-        # 健康检查
+        # 健康检查（不需要认证）
         results['health'] = await self.test_health()
+        
+        # API Key认证测试
+        results['api_auth'] = await self.test_api_authentication()
         
         # 模型列表
         results['models'] = await self.test_models()
@@ -183,7 +266,7 @@ class QwenProxyTester:
         results['auth'] = await self.test_auth_endpoints()
         
         # 如果基本端点工作，尝试API端点
-        if results['health']:
+        if results['health'] and self.api_key:
             # 聊天完成（常规）
             results['chat_regular'] = await self.test_chat_completion(use_streaming=False)
             
@@ -193,7 +276,10 @@ class QwenProxyTester:
             # 嵌入向量
             results['embeddings'] = await self.test_embeddings()
         else:
-            print("⚠️  跳过API测试，因为健康检查失败")
+            if not self.api_key:
+                print("⚠️  跳过API测试，因为需要API Key")
+            else:
+                print("⚠️  跳过API测试，因为健康检查失败")
             results.update({
                 'chat_regular': False,
                 'chat_streaming': False,
@@ -232,12 +318,13 @@ async def main():
     
     parser = argparse.ArgumentParser(description="测试Qwen代理API")
     parser.add_argument("--url", default="http://localhost:8080", help="代理服务器URL")
-    parser.add_argument("--test", choices=['health', 'models', 'chat', 'embeddings', 'auth', 'all'], 
+    parser.add_argument("--api-key", default="d8b94d28-7300-4fb0-bb61-7fd7248c3995", help="API Key用于认证")
+    parser.add_argument("--test", choices=['health', 'models', 'chat', 'embeddings', 'auth', 'api_auth', 'all'], 
                        default='all', help="要运行的测试")
     
     args = parser.parse_args()
     
-    tester = QwenProxyTester(args.url)
+    tester = QwenProxyTester(args.url, args.api_key)
     
     try:
         if args.test == 'all':
@@ -252,6 +339,8 @@ async def main():
             await tester.test_embeddings()
         elif args.test == 'auth':
             await tester.test_auth_endpoints()
+        elif args.test == 'api_auth':
+            await tester.test_api_authentication()
     
     except KeyboardInterrupt:
         print("\n测试被用户中断")

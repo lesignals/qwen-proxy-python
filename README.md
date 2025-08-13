@@ -91,26 +91,39 @@
 
 代理服务器可以使用环境变量进行配置。在项目根目录中创建 `.env` 文件或直接在环境中设置变量。
 
-* `LOG_FILE_LIMIT`: 保留的调试日志文件最大数量（默认：20）
-* `DEBUG_LOG`: 设置为 `true` 启用调试日志（默认：false）
-* `STREAM`: 设置为 `true` 启用流式响应（默认：false）
-* `API_TIMEOUT`: API请求超时时间，秒（默认：300）
+### 认证配置
+* `API_KEY`: 用于保护代理服务器的API密钥。如果设置，所有API请求都需要在Authorization header中提供此密钥。如果未设置，将禁用认证功能。
+
+### 服务器配置
 * `HOST`: 绑定地址（默认：localhost）
 * `PORT`: 监听端口（默认：8080）
+* `STREAM`: 设置为 `true` 启用流式响应（默认：false）
+* `API_TIMEOUT`: API请求超时时间，秒（默认：300）
+
+### 调试配置
+* `DEBUG_LOG`: 设置为 `true` 启用调试日志（默认：false）
+* `LOG_FILE_LIMIT`: 保留的调试日志文件最大数量（默认：20）
 
 示例 `.env` 文件:
 ```bash
-# 只保留最近的10个日志文件
-LOG_FILE_LIMIT=10
+# API认证（推荐设置以保护服务器）
+API_KEY=your-secret-api-key-here
 
-# 启用调试日志（将创建日志文件）
-DEBUG_LOG=true
+# 服务器配置
+HOST=localhost
+PORT=8080
 
 # 启用流式响应（默认禁用）
 STREAM=true
 
 # API超时时间（5分钟）
 API_TIMEOUT=300
+
+# 启用调试日志（将创建日志文件）
+DEBUG_LOG=true
+
+# 只保留最近的10个日志文件
+LOG_FILE_LIMIT=10
 ```
 
 ## 使用示例
@@ -121,7 +134,7 @@ API_TIMEOUT=300
 import openai
 
 client = openai.OpenAI(
-    api_key="fake-key",  # 不使用，但OpenAI客户端需要
+    api_key="your-secret-api-key-here",  # 使用您在.env中设置的API_KEY
     base_url="http://localhost:8080/v1"
 )
 
@@ -140,7 +153,7 @@ print(response.choices[0].message.content)
 ```bash
 curl -X POST "http://localhost:8080/v1/chat/completions" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer fake-key" \
+  -H "Authorization: Bearer your-secret-api-key-here" \
   -d '{
     "model": "qwen3-coder-plus",
     "messages": [
@@ -151,28 +164,33 @@ curl -X POST "http://localhost:8080/v1/chat/completions" \
 
 ## 支持的端点
 
-* `POST /v1/chat/completions` - 聊天完成
-* `GET /v1/models` - 模型列表
-* `POST /v1/embeddings` - 嵌入向量
-* `POST /auth/initiate` - 启动认证流程
-* `POST /auth/poll` - 轮询认证状态
-* `GET /health` - 健康检查
+* `POST /v1/chat/completions` - 聊天完成 (需要认证)
+* `GET /v1/models` - 模型列表 (需要认证)
+* `POST /v1/embeddings` - 嵌入向量 (需要认证)
+* `POST /auth/initiate` - 启动认证流程 (需要认证)
+* `POST /auth/poll` - 轮询认证状态 (需要认证)
+* `GET /health` - 健康检查 (无需认证)
+
+**注意**: 除了健康检查端点外，所有端点都需要在设置了`API_KEY`环境变量时提供有效的Authorization header。
 
 ## 测试
 
 运行包含的测试脚本来验证功能:
 
 ```bash
-# 运行所有测试
-python test_api.py
+# 使用API Key运行所有测试
+python test_api.py --api-key your-secret-api-key-here
 
 # 运行特定测试
 python test_api.py --test health
-python test_api.py --test models
-python test_api.py --test chat
+python test_api.py --test models --api-key your-secret-api-key-here
+python test_api.py --test chat --api-key your-secret-api-key-here
+
+# 测试API认证功能
+python test_api.py --test api_auth --api-key your-secret-api-key-here
 
 # 测试不同的URL
-python test_api.py --url http://localhost:8080
+python test_api.py --url http://localhost:8080 --api-key your-secret-api-key-here
 ```
 
 ## Token计数

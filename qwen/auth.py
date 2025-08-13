@@ -61,8 +61,7 @@ class QwenAuthManager:
         self.last_reset_date = datetime.now().strftime('%Y-%m-%d')
         self.request_count_file = self.qwen_dir / 'request_counts.json'
         
-        # 加载请求计数
-        asyncio.create_task(self.load_request_counts())
+        # 加载请求计数将在第一次调用时完成
     
     async def load_credentials(self) -> Optional[QwenCredentials]:
         """加载默认凭据."""
