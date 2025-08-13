@@ -73,6 +73,8 @@ async def lifespan(app: FastAPI):
         await qwen_api.auth_manager.load_request_counts()  # 加载请求计数
         account_ids = qwen_api.auth_manager.get_account_ids()
         
+        print(f'\n🔍 调试信息: 检测到 {len(account_ids)} 个账户: {account_ids}')
+        
         if account_ids:
             print('\n\033[36m可用账户:\033[0m')
             for account_id in account_ids:

@@ -152,18 +152,30 @@ class QwenAuth:
         """显示请求计数."""
         try:
             await self.auth_manager.load_all_accounts()
+            await self.auth_manager.load_request_counts()  # 确保加载请求计数
             account_ids = self.auth_manager.get_account_ids()
-            
-            if not account_ids:
-                print("❌ 未找到多账户配置")
-                return
             
             print("账户请求计数 (今日):")
             total_requests = 0
-            for account_id in account_ids:
-                count = self.auth_manager.get_request_count(account_id)
-                total_requests += count
-                print(f"  {account_id}: {count} 次请求")
+            
+            if account_ids:
+                # 显示多账户
+                for account_id in account_ids:
+                    count = self.auth_manager.get_request_count(account_id)
+                    total_requests += count
+                    print(f"  {account_id}: {count} 次请求")
+            else:
+                # 显示单账户（默认账户）
+                default_count = self.auth_manager.get_request_count("default")
+                total_requests += default_count
+                print(f"  default: {default_count} 次请求")
+                
+                # 检查是否有默认认证
+                default_credentials = await self.auth_manager.load_credentials()
+                if default_credentials:
+                    is_valid = self.auth_manager.is_token_valid(default_credentials)
+                    status = "✅ 有效" if is_valid else "❌ 无效/已过期"
+                    print(f"  状态: {status}")
             
             print(f"\n总计: {total_requests} 次请求")
             print(f"重置日期: {self.auth_manager.last_reset_date} (UTC)")
