@@ -232,6 +232,11 @@ class QwenAPI:
         credentials = await self.auth_manager.load_credentials()
         api_endpoint = await self.get_api_endpoint(credentials)
         
+        # 显示请求计数（使用default作为账户ID）
+        account_id = "default"
+        current_count = self.auth_manager.get_request_count(account_id) + 1
+        print(f'\033[36m使用默认账户 (今日第 #{current_count} 次请求)\033[0m')
+        
         # 进行API调用
         url = f"{api_endpoint}/chat/completions"
         payload = {
@@ -251,6 +256,11 @@ class QwenAPI:
         }
         
         try:
+            # 增加请求计数
+            await self.auth_manager.increment_request_count(account_id)
+            updated_count = self.auth_manager.get_request_count(account_id)
+            print(f'\033[36m使用默认账户 (今日第 #{updated_count} 次请求)\033[0m')
+            
             async with httpx.AsyncClient(timeout=config.api_timeout) as client:
                 response = await client.post(url, json=payload, headers=headers)
                 response.raise_for_status()
