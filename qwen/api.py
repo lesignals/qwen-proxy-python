@@ -109,118 +109,66 @@ class QwenAPI:
         if not account_ids:
             return await self.chat_completions_single_account(request)
         
-        # 使用轮询模式获取账户
-        last_error = None
-        max_retries = len(account_ids)
+        # 简单轮询：每个请求只使用一个账户
+        account_info = await self.auth_manager.get_next_account()
+        if not account_info:
+            raise Exception("没有可用账户")
         
-        for i in range(max_retries):
-            try:
-                # 获取下一个账户（轮询模式）
-                account_info = await self.auth_manager.get_next_account()
-                if not account_info:
-                    raise Exception("没有可用账户")
-                
-                account_id = account_info["accountId"]
-                credentials = account_info["credentials"]
-                
-                if not credentials:
-                    # 如果当前账户无效，继续下一个账户
-                    continue
-                
-                # 显示正在使用的账户
-                request_count = self.auth_manager.get_request_count(account_id) + 1
-                print(f'\033[36m使用账户 {account_id} (今日第 #{request_count} 次请求)\033[0m')
-                
-                # 获取此账户的有效访问token
-                access_token = await self.auth_manager.get_valid_access_token(account_id)
-                
-                # 获取API端点
-                api_endpoint = await self.get_api_endpoint(credentials)
-                
-                # 进行API调用
-                url = f"{api_endpoint}/chat/completions"
-                payload = {
-                    'model': request.model or config.default_model,
-                    'messages': [msg.model_dump() for msg in request.messages],
-                    'temperature': request.temperature,
-                    'max_tokens': request.max_tokens,
-                    'top_p': request.top_p,
-                    'tools': request.tools,
-                    'tool_choice': request.tool_choice
-                }
-                
-                headers = {
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {access_token}',
-                    'User-Agent': 'QwenOpenAIProxy/1.0.0 (linux; x64)'
-                }
-                
-                # 增加此账户的请求计数
-                await self.auth_manager.increment_request_count(account_id)
-                updated_count = self.auth_manager.get_request_count(account_id)
-                print(f'\033[36m使用账户 {account_id} (今日第 #{updated_count} 次请求)\033[0m')
-                
-                async with httpx.AsyncClient(timeout=config.api_timeout) as client:
-                    response = await client.post(url, json=payload, headers=headers)
-                    response.raise_for_status()
-                    return response.json()
-                    
-            except Exception as error:
-                last_error = error
-                
-                # 检查是否为配额超出错误
-                if is_quota_exceeded_error(error):
-                    print(f'\033[33m账户 {account_id} 配额已超出 (第 #{self.auth_manager.get_request_count(account_id)} 次请求)，尝试下一个账户...\033[0m')
-                    # 继续到下一个账户（已经通过get_next_account轮询了）
-                    continue
-                
-                # 检查是否为可能受益于重试的认证错误
-                if is_auth_error(error):
-                    print(f'\033[33m检测到认证错误 ({getattr(error.response, "status_code", "N/A") if hasattr(error, "response") else "N/A"})，尝试刷新token并重试...\033[0m')
-                    try:
-                        account_info = await self.auth_manager.get_next_account()
-                        if account_info:
-                            account_id = account_info["accountId"]
-                            credentials = account_info["credentials"]
-                            # 强制刷新token并重试一次
-                            await self.auth_manager.perform_token_refresh(credentials, account_id)
-                            new_access_token = await self.auth_manager.get_valid_access_token(account_id)
-                            
-                            # 使用新token重试请求
-                            print('\033[36m使用刷新后的token重试请求...\033[0m')
-                            retry_headers = {
-                                'Content-Type': 'application/json',
-                                'Authorization': f'Bearer {new_access_token}',
-                                'User-Agent': 'QwenOpenAIProxy/1.0.0 (linux; x64)'
-                            }
-                            
-                            # 增加此账户的请求计数
-                            await self.auth_manager.increment_request_count(account_id)
-                            
-                            async with httpx.AsyncClient(timeout=config.api_timeout) as client:
-                                retry_response = await client.post(url, json=payload, headers=retry_headers)
-                                retry_response.raise_for_status()
-                                print('\033[32m刷新token后请求成功\033[0m')
-                                return retry_response.json()
-                    except Exception as retry_error:
-                        print('\033[31m即使刷新token后请求仍然失败\033[0m')
-                        # 如果重试失败，继续到下一个账户
-                        continue
-                
-                # 对于其他错误，重新抛出
-                if hasattr(error, 'response'):
-                    # 请求已发出，服务器返回状态码
-                    error_data = error.response.json() if hasattr(error.response, 'json') else str(error.response.text)
-                    raise HTTPException(
-                        status_code=error.response.status_code,
-                        detail=f"Qwen API错误: {error.response.status_code} {error_data}"
-                    )
-                else:
-                    # 请求发出但未收到响应，或设置请求时发生错误
-                    raise HTTPException(status_code=500, detail=f"Qwen API请求失败: {str(error)}")
+        account_id = account_info["accountId"]
+        credentials = account_info["credentials"]
         
-        # 如果到达这里，所有账户都失败了
-        raise HTTPException(status_code=500, detail=f"所有账户都失败了。最后错误: {str(last_error)}")
+        if not credentials:
+            raise Exception(f"账户 {account_id} 凭据无效")
+        
+        try:
+            # 显示正在使用的账户
+            request_count = self.auth_manager.get_request_count(account_id) + 1
+            print(f'\033[36m使用账户 {account_id} (今日第 #{request_count} 次请求)\033[0m')
+            
+            # 获取此账户的有效访问token
+            access_token = await self.auth_manager.get_valid_access_token(account_id)
+            
+            # 获取API端点
+            api_endpoint = await self.get_api_endpoint(credentials)
+            
+            # 进行API调用
+            url = f"{api_endpoint}/chat/completions"
+            payload = {
+                'model': request.model or config.default_model,
+                'messages': [msg.model_dump() for msg in request.messages],
+                'temperature': request.temperature,
+                'max_tokens': request.max_tokens,
+                'top_p': request.top_p,
+                'tools': request.tools,
+                'tool_choice': request.tool_choice
+            }
+            
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {access_token}',
+                'User-Agent': 'QwenOpenAIProxy/1.0.0 (linux; x64)'
+            }
+            
+            # 增加此账户的请求计数
+            await self.auth_manager.increment_request_count(account_id)
+            updated_count = self.auth_manager.get_request_count(account_id)
+            print(f'\033[36m使用账户 {account_id} (今日第 #{updated_count} 次请求)\033[0m')
+            
+            async with httpx.AsyncClient(timeout=config.api_timeout) as client:
+                response = await client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+                return response.json()
+                
+        except Exception as error:
+            # 简单错误处理：直接抛出错误，让下一个请求使用下一个账户
+            if hasattr(error, 'response'):
+                error_data = error.response.json() if hasattr(error.response, 'json') else str(error.response.text)
+                raise HTTPException(
+                    status_code=error.response.status_code,
+                    detail=f"Qwen API错误: {error.response.status_code} {error_data}"
+                )
+            else:
+                raise HTTPException(status_code=500, detail=f"Qwen API请求失败: {str(error)}")
     
     async def chat_completions_single_account(self, request: ChatCompletionRequest) -> Dict[str, Any]:
         """单账户聊天完成API调用."""
