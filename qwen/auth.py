@@ -333,6 +333,30 @@ class QwenAuthManager:
         
         return {"accountId": account_id, "credentials": credentials}
     
+    def get_current_account(self) -> Optional[Dict[str, Any]]:
+        """获取当前账户（轮询模式）."""
+        if not self.accounts:
+            return None
+        
+        account_ids = self.get_account_ids()
+        if not account_ids:
+            return None
+        
+        # 获取当前账户
+        account_id = account_ids[self.current_account_index]
+        credentials = self.get_account_credentials(account_id)
+        
+        return {"accountId": account_id, "credentials": credentials}
+    
+    def rotate_to_next_account(self):
+        """轮换到下一个账户."""
+        if not self.accounts:
+            return
+        
+        account_ids = self.get_account_ids()
+        if len(account_ids) > 1:
+            self.current_account_index = (self.current_account_index + 1) % len(account_ids)
+    
     def is_account_valid(self, account_id: str) -> bool:
         """检查账户是否有有效凭据."""
         credentials = self.get_account_credentials(account_id)

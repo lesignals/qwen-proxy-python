@@ -109,20 +109,22 @@ class QwenAPI:
         if not account_ids:
             return await self.chat_completions_single_account(request)
         
-        # 从第一个账户开始（粘性选择）
-        current_account_index = 0
+        # 使用轮询模式获取账户
         last_error = None
         max_retries = len(account_ids)
         
         for i in range(max_retries):
             try:
-                # 获取当前账户（粘性直到配额错误）
-                account_id = account_ids[current_account_index]
-                credentials = self.auth_manager.get_account_credentials(account_id)
+                # 获取下一个账户（轮询模式）
+                account_info = await self.auth_manager.get_next_account()
+                if not account_info:
+                    raise Exception("没有可用账户")
+                
+                account_id = account_info["accountId"]
+                credentials = account_info["credentials"]
                 
                 if not credentials:
-                    # 如果当前账户无效，移动到下一个账户
-                    current_account_index = (current_account_index + 1) % len(account_ids)
+                    # 如果当前账户无效，继续下一个账户
                     continue
                 
                 # 显示正在使用的账户
@@ -168,13 +170,8 @@ class QwenAPI:
                 
                 # 检查是否为配额超出错误
                 if is_quota_exceeded_error(error):
-                    print(f'\033[33m账户 {account_id} 配额已超出 (第 #{self.auth_manager.get_request_count(account_id)} 次请求)，轮换到下一个账户...\033[0m')
-                    # 移动到下一个账户用于下次请求
-                    current_account_index = (current_account_index + 1) % len(account_ids)
-                    # 预览下一个账户以显示我们将轮换到哪个
-                    next_account_id = account_ids[current_account_index]
-                    print(f'\033[33m将尝试下一个账户 {next_account_id}\033[0m')
-                    # 继续到下一个账户
+                    print(f'\033[33m账户 {account_id} 配额已超出 (第 #{self.auth_manager.get_request_count(account_id)} 次请求)，尝试下一个账户...\033[0m')
+                    # 继续到下一个账户（已经通过get_next_account轮询了）
                     continue
                 
                 # 检查是否为可能受益于重试的认证错误

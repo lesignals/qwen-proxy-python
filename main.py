@@ -70,6 +70,7 @@ async def lifespan(app: FastAPI):
     # 显示可用账户
     try:
         await qwen_api.auth_manager.load_all_accounts()
+        await qwen_api.auth_manager.load_request_counts()  # 加载请求计数
         account_ids = qwen_api.auth_manager.get_account_ids()
         
         if account_ids:
